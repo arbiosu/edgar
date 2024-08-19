@@ -8,6 +8,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
+	"regexp"
 	"strconv"
 	"time"
 
@@ -85,7 +87,7 @@ func main() {
 }
 
 func handleServer(config types.ServerConfig) {
-	err := createConfigDir()
+	err := createDir("config")
 	if err != nil {
 		log.Println(err)
 		os.Exit(1)
@@ -102,26 +104,34 @@ func handleServer(config types.ServerConfig) {
 	}
 }
 
-func handleGet(get *types.GetConfig) {
+func handleGet(getConfig *types.GetConfig) {
 	serverConfig := checkConfig()
 	// TODO: handle when CIK is given
 	tickers := checkCompanyTickers(serverConfig)
-	cik, ok := tickers[get.Ticker]
+	cik, ok := tickers[getConfig.Ticker]
 	if !ok {
 		// TODO: handle err
 		fmt.Printf("Error: Ticker not found! Exiting program.\n")
 		os.Exit(1)
 	}
-	fmt.Printf("CIK: %d\n", cik)
 	cikStr := strconv.Itoa(cik)
-	url := assembleSubmissionsUrl(cikStr, get)
-	fmt.Printf("URL: %s\n", url)
-	fmt.Printf("CIK: %s\n", get.CIK)
+	url := assembleSubmissionsUrl(cikStr, getConfig)
+	urls := getFileUrls(url, serverConfig, getConfig)
+	err := downloadFiles(urls, serverConfig, getConfig)
+	if err != nil {
+		fmt.Printf("Error: Failed to download files! (%v)\n", err)
+		os.Exit(1)
+	}
 }
 
-// Creates the config/ directory. Returns nil on success.
-func createConfigDir() error {
-	err := os.Mkdir("config", 0750)
+// Creates a directory
+func createDir(name string) error {
+	var err error
+	if filepath.Dir(name) != "." {
+		err = os.MkdirAll(name, os.ModePerm)
+	} else {
+		err = os.Mkdir(name, os.ModePerm)
+	}
 	if err != nil && !os.IsExist(err) {
 		return err
 	}
@@ -146,9 +156,90 @@ func checkConfig() *types.ServerConfig {
 	return &serverConfig
 }
 
+// Makes a GET request to the given URL and returns the response body.
+func makeSecRequest(url string, s *types.ServerConfig) ([]byte, error) {
+	client := http.Client{}
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header = http.Header{
+		"User-Agent":   {s.Usage + " " + s.Email},
+		"Content-Type": {"application/json"},
+	}
+	res, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, err
+	}
+	return body, nil
+}
+
+// Gets the URLs of the desired filings
+func getFileUrls(url string, s *types.ServerConfig, g *types.GetConfig) []string {
+	body, err := makeSecRequest(url, s)
+	if err != nil {
+		fmt.Printf("Error: could not make SEC Request! (%v)\n", err)
+		// TODO: handle
+	}
+	var c types.Company
+	err = json.Unmarshal(body, &c)
+	if err != nil {
+		fmt.Printf("Error: could not unmarshal JSON! (%V)\n", err)
+		// TODO: handle
+	}
+	// Iterate over the Form slice to find the index of the desired filings.
+	// Get the accession number and the primary document at the asscoiated index.
+	// Assemble the URLs to retrieve the desired filings.
+	newUrl := "https://www.sec.gov/Archives/edgar/data/"
+	urls := make([]string, 0)
+	for i, v := range c.Filings.Recent.Form {
+		// TODO: Validate g.Period with c.Filings.Recent.FilingDate[i]
+		// Ensure g.Doc is correct ie: 10-K, 10-Q
+		if v == g.Doc {
+			// strip '-' from accession number
+			re := regexp.MustCompile(`-`)
+			cleaned := re.ReplaceAllString(c.Filings.Recent.AccessionNumber[i], "")
+			urls = append(urls, newUrl+c.Cik+"/"+cleaned+"/"+c.Filings.Recent.PrimaryDocument[i])
+
+		}
+	}
+	return urls
+}
+
+func downloadFiles(urls []string, s *types.ServerConfig, g *types.GetConfig) error {
+	err := createDir("app/" + g.Ticker + "/")
+	if err != nil {
+		fmt.Printf("Error: could not create 'app' directory! (%v)\n", err)
+		os.Exit(1)
+		// TODO: handle
+	}
+	for i := 0; i < len(urls); i++ {
+		body, err := makeSecRequest(urls[i], s)
+		if err != nil {
+			fmt.Printf("Error: could not request %s! (%v)\n", urls[i], err)
+			// TODO: Handle
+		}
+		err = os.WriteFile("./app/"+g.Ticker+"/"+g.Doc+".html", body, 0666)
+		if err != nil {
+			fmt.Printf("Error: could not write file! (%v)\n", err)
+			return err
+		}
+	}
+	return nil
+}
+
 // Downloads company_tickers.json to config/ directory. Returns an error if
 // unsuccessful
 func getCompanyTickers(s *types.ServerConfig) error {
+	// TODO: replace with makeSecRequest
+	// make url a const
+	// pass it in function call to sec request
+	// write to config/company_tickers.json
 	client := http.Client{}
 	req, err := http.NewRequest("GET", "https://www.sec.gov/files/company_tickers.json", nil)
 	if err != nil {

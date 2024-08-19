@@ -41,3 +41,10 @@ type Ticker struct {
 	Cik  int    `json:"cik_str"`
 	Tick string `json:"ticker"`
 }
+
+type FinancialData struct {
+	Category string
+	Year1    string
+	Year2    string
+	Year3    string
+}

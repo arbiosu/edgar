@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -10,10 +11,11 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"strconv"
+	"strings"
 	"time"
 
 	"github.com/arbiosu/edgar/types"
+	"golang.org/x/net/html"
 )
 
 func setupFlags(s *types.ServerConfig, g *types.GetConfig, p *types.ParseConfig) map[string]*flag.FlagSet {
@@ -105,22 +107,31 @@ func handleServer(config types.ServerConfig) {
 }
 
 func handleGet(getConfig *types.GetConfig) {
-	serverConfig := checkConfig()
-	// TODO: handle when CIK is given
-	tickers := checkCompanyTickers(serverConfig)
-	cik, ok := tickers[getConfig.Ticker]
-	if !ok {
-		// TODO: handle err
-		fmt.Printf("Error: Ticker not found! Exiting program.\n")
+	/*
+		serverConfig := checkConfig()
+		// TODO: handle when CIK is given
+		tickers := checkCompanyTickers(serverConfig)
+		cik, ok := tickers[getConfig.Ticker]
+		if !ok {
+			// TODO: handle err
+			fmt.Printf("Error: Ticker not found! Exiting program.\n")
+			os.Exit(1)
+		}
+		cikStr := strconv.Itoa(cik)
+		url := assembleSubmissionsUrl(cikStr, getConfig)
+		urls := getFileUrls(url, serverConfig, getConfig)
+		err := downloadFiles(urls, serverConfig, getConfig)
+		if err != nil {
+			fmt.Printf("Error: Failed to download files! (%v)\n", err)
+			os.Exit(1)
+		}
+	*/
+	d, err := parseFile(getConfig)
+	if err != nil {
 		os.Exit(1)
 	}
-	cikStr := strconv.Itoa(cik)
-	url := assembleSubmissionsUrl(cikStr, getConfig)
-	urls := getFileUrls(url, serverConfig, getConfig)
-	err := downloadFiles(urls, serverConfig, getConfig)
-	if err != nil {
-		fmt.Printf("Error: Failed to download files! (%v)\n", err)
-		os.Exit(1)
+	for i := 0; i < 100; i++ {
+		fmt.Printf("Category: %v\nYear1: %v\n Y2: %v\n Y3: %v\n", d[i].Category, d[i].Year1, d[i].Year2, d[i].Year3)
 	}
 }
 
@@ -229,8 +240,75 @@ func downloadFiles(urls []string, s *types.ServerConfig, g *types.GetConfig) err
 			fmt.Printf("Error: could not write file! (%v)\n", err)
 			return err
 		}
+		g.RawFile = "./app/" + g.Ticker + "/" + g.Doc + ".html"
 	}
 	return nil
+}
+
+func parseFile(g *types.GetConfig) ([]types.FinancialData, error) {
+	file, err := os.Open(g.RawFile)
+	if err != nil {
+		fmt.Printf("Error: could not parse html file!\n", err)
+		os.Exit(1)
+		// TODO: handle
+	}
+	defer file.Close()
+	reader := bufio.NewReader(file)
+
+	doc, err := html.Parse(reader)
+	if err != nil {
+		return nil, err
+	}
+	var financialData []types.FinancialData
+	var f func(*html.Node)
+	f = func(n *html.Node) {
+		if n.Type == html.ElementNode && n.Data == "tr" {
+			data := extractRowData(n)
+			if data.Category != "" {
+				financialData = append(financialData, data)
+			}
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			f(c)
+		}
+	}
+	f(doc)
+
+	return financialData, nil
+}
+
+func extractRowData(n *html.Node) types.FinancialData {
+	var data types.FinancialData
+	var cellIdx int
+
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		if c.Type == html.ElementNode && c.Data == "td" {
+			text := extractText(c)
+			switch cellIdx {
+			case 0:
+				data.Category = strings.TrimSpace(text)
+			case 3:
+				data.Year1 = strings.TrimSpace(text)
+			case 7:
+				data.Year2 = strings.TrimSpace(text)
+			case 11:
+				data.Year3 = strings.TrimSpace(text)
+			}
+			cellIdx++
+		}
+	}
+	return data
+}
+
+func extractText(n *html.Node) string {
+	var text string
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		if c.Type == html.TextNode {
+			text += c.Data
+		}
+		text += extractText(c)
+	}
+	return text
 }
 
 // Downloads company_tickers.json to config/ directory. Returns an error if

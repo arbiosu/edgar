@@ -24,7 +24,9 @@ func setupFlags(c *types.ClientConfig, g *types.GetConfig, p *types.ParseConfig)
 
 	client := flag.NewFlagSet("client", flag.ExitOnError)
 	client.StringVar(&c.Email, "email", "hello@example.com", "Your email address")
+	client.StringVar(&c.Email, "e", "hello@example.com", "Your email address"+sh)
 	client.StringVar(&c.Usage, "usage", "personal use", "Usage statement")
+	client.StringVar(&c.Usage, "u", "personal use", "Usage statement"+sh)
 
 	get := flag.NewFlagSet("get", flag.ExitOnError)
 	get.StringVar(&g.CIK, "cik", "", "CIK number")

@@ -1,7 +1,6 @@
 package types
 
-type ServerConfig struct {
-	Port  int
+type ClientConfig struct {
 	Email string
 	Usage string
 }
@@ -20,9 +19,10 @@ type ParseConfig struct {
 	Output string
 }
 
-// The Company struct is used to unmarshal the JSON response from
-// the data.sec.gov/submissions/ API endpoint.
-type Company struct {
+// The CompanyFilings struct is used to unmarshal the JSON response from
+// the data.sec.gov/submissions/ API endpoint. The JSON response contains
+// TODO: flesh out
+type CompanyFilings struct {
 	Cik     string `json:"cik"`
 	Name    string `json:"name"`
 	Filings struct {

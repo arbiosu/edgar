@@ -6,7 +6,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -91,17 +90,17 @@ func main() {
 func handleServer(config types.ServerConfig) {
 	err := createDir("config")
 	if err != nil {
-		log.Println(err)
+		fmt.Printf("Error: could not create 'config' directory! (%v)\n", err)
 		os.Exit(1)
 	}
 	bytes, err := json.Marshal(config)
 	if err != nil {
-		log.Println(err)
+		fmt.Printf("Error: could not marshal JSON! (%v)\n", err)
 		os.Exit(1)
 	}
 	err = os.WriteFile("config/config.json", bytes, 0660)
 	if err != nil {
-		log.Println(err)
+		fmt.Printf("Error: could not create config.json! (%v)\n", err)
 		os.Exit(1)
 	}
 }
@@ -248,7 +247,7 @@ func downloadFiles(urls []string, s *types.ServerConfig, g *types.GetConfig) err
 func parseFile(g *types.GetConfig) ([]types.FinancialData, error) {
 	file, err := os.Open(g.RawFile)
 	if err != nil {
-		fmt.Printf("Error: could not parse html file!\n", err)
+		fmt.Printf("Error: could not parse html file! (%v)\n", err)
 		os.Exit(1)
 		// TODO: handle
 	}

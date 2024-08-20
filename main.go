@@ -17,15 +17,14 @@ import (
 	"golang.org/x/net/html"
 )
 
-func setupFlags(s *types.ServerConfig, g *types.GetConfig, p *types.ParseConfig) map[string]*flag.FlagSet {
+func setupFlags(c *types.ClientConfig, g *types.GetConfig, p *types.ParseConfig) map[string]*flag.FlagSet {
 	sh := "(shorthand)"
 	now := time.Now()
 	year := now.Year()
 
-	server := flag.NewFlagSet("server", flag.ExitOnError)
-	server.IntVar(&s.Port, "port", 8080, "Server port")
-	server.StringVar(&s.Email, "email", "hello@example.com", "Your email address")
-	server.StringVar(&s.Usage, "usage", "personal use", "Usage statement")
+	client := flag.NewFlagSet("client", flag.ExitOnError)
+	client.StringVar(&c.Email, "email", "hello@example.com", "Your email address")
+	client.StringVar(&c.Usage, "usage", "personal use", "Usage statement")
 
 	get := flag.NewFlagSet("get", flag.ExitOnError)
 	get.StringVar(&g.CIK, "cik", "", "CIK number")
@@ -48,7 +47,7 @@ func setupFlags(s *types.ServerConfig, g *types.GetConfig, p *types.ParseConfig)
 	parse.StringVar(&p.Output, "o", p.File+"."+p.Format, "Name of the output file")
 
 	m := make(map[string]*flag.FlagSet)
-	m["server"] = server
+	m["client"] = client
 	m["get"] = get
 	m["parse"] = parse
 
@@ -59,10 +58,10 @@ func main() {
 
 	// TODO: check for previous server config and company_tickers.json
 
-	var serverConfig types.ServerConfig
+	var clientConfig types.ClientConfig
 	var getConfig types.GetConfig
 	var parseConfig types.ParseConfig
-	m := setupFlags(&serverConfig, &getConfig, &parseConfig)
+	m := setupFlags(&clientConfig, &getConfig, &parseConfig)
 
 	if len(os.Args) < 2 {
 		fmt.Println("expected 'server' or 'get' subcommands")
@@ -72,8 +71,8 @@ func main() {
 	switch os.Args[1] {
 	case "server":
 		m["server"].Parse(os.Args[2:])
-		handleServer(serverConfig)
-		fmt.Printf("EDGAR Server Configuration: %+v\n", serverConfig)
+		handleClient(&clientConfig)
+		fmt.Printf("EDGAR Client Configuration: %+v\n", clientConfig)
 	case "get":
 		m["get"].Parse(os.Args[2:])
 		handleGet(&getConfig)
@@ -87,7 +86,7 @@ func main() {
 	}
 }
 
-func handleServer(config types.ServerConfig) {
+func handleClient(config *types.ClientConfig) {
 	err := createDir("config")
 	if err != nil {
 		fmt.Printf("Error: could not create 'config' directory! (%v)\n", err)
@@ -107,9 +106,9 @@ func handleServer(config types.ServerConfig) {
 
 func handleGet(getConfig *types.GetConfig) {
 	/*
-		serverConfig := checkConfig()
+		clientConfig := checkConfig()
 		// TODO: handle when CIK is given
-		tickers := checkCompanyTickers(serverConfig)
+		tickers := checkCompanyTickers(clientConfig)
 		cik, ok := tickers[getConfig.Ticker]
 		if !ok {
 			// TODO: handle err
@@ -118,8 +117,8 @@ func handleGet(getConfig *types.GetConfig) {
 		}
 		cikStr := strconv.Itoa(cik)
 		url := assembleSubmissionsUrl(cikStr, getConfig)
-		urls := getFileUrls(url, serverConfig, getConfig)
-		err := downloadFiles(urls, serverConfig, getConfig)
+		urls := getFileUrls(url, clientConfig, getConfig)
+		err := downloadFiles(urls, clientConfig, getConfig)
 		if err != nil {
 			fmt.Printf("Error: Failed to download files! (%v)\n", err)
 			os.Exit(1)
@@ -148,33 +147,33 @@ func createDir(name string) error {
 	return nil
 }
 
-func checkConfig() *types.ServerConfig {
+func checkConfig() *types.ClientConfig {
 	fmt.Println("Checking for previous server configuration...")
 	c, err := os.ReadFile("./config/config.json")
 	if err != nil {
 		fmt.Printf("Error reading config file: %v\n", err)
 		os.Exit(1)
 	}
-	var serverConfig types.ServerConfig
-	err = json.Unmarshal(c, &serverConfig)
+	var clientConfig types.ClientConfig
+	err = json.Unmarshal(c, &clientConfig)
 
 	if err != nil {
 		fmt.Printf("Error reading config file: %v\n", err)
 		os.Exit(1)
 	}
 	fmt.Println("Config found!")
-	return &serverConfig
+	return &clientConfig
 }
 
 // Makes a GET request to the given URL and returns the response body.
-func makeSecRequest(url string, s *types.ServerConfig) ([]byte, error) {
+func makeSecRequest(url string, c *types.ClientConfig) ([]byte, error) {
 	client := http.Client{}
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
 	req.Header = http.Header{
-		"User-Agent":   {s.Usage + " " + s.Email},
+		"User-Agent":   {c.Usage + " " + c.Email},
 		"Content-Type": {"application/json"},
 	}
 	res, err := client.Do(req)
@@ -190,13 +189,13 @@ func makeSecRequest(url string, s *types.ServerConfig) ([]byte, error) {
 }
 
 // Gets the URLs of the desired filings
-func getFileUrls(url string, s *types.ServerConfig, g *types.GetConfig) []string {
-	body, err := makeSecRequest(url, s)
+func getFileUrls(url string, c *types.ClientConfig, g *types.GetConfig) []string {
+	body, err := makeSecRequest(url, c)
 	if err != nil {
 		fmt.Printf("Error: could not make SEC Request! (%v)\n", err)
 		// TODO: handle
 	}
-	var c types.Company
+	var cf types.CompanyFilings
 	err = json.Unmarshal(body, &c)
 	if err != nil {
 		fmt.Printf("Error: could not unmarshal JSON! (%V)\n", err)
@@ -207,21 +206,21 @@ func getFileUrls(url string, s *types.ServerConfig, g *types.GetConfig) []string
 	// Assemble the URLs to retrieve the desired filings.
 	newUrl := "https://www.sec.gov/Archives/edgar/data/"
 	urls := make([]string, 0)
-	for i, v := range c.Filings.Recent.Form {
+	for i, v := range cf.Filings.Recent.Form {
 		// TODO: Validate g.Period with c.Filings.Recent.FilingDate[i]
 		// Ensure g.Doc is correct ie: 10-K, 10-Q
 		if v == g.Doc {
 			// strip '-' from accession number
 			re := regexp.MustCompile(`-`)
-			cleaned := re.ReplaceAllString(c.Filings.Recent.AccessionNumber[i], "")
-			urls = append(urls, newUrl+c.Cik+"/"+cleaned+"/"+c.Filings.Recent.PrimaryDocument[i])
+			cleaned := re.ReplaceAllString(cf.Filings.Recent.AccessionNumber[i], "")
+			urls = append(urls, newUrl+cf.Cik+"/"+cleaned+"/"+cf.Filings.Recent.PrimaryDocument[i])
 
 		}
 	}
 	return urls
 }
 
-func downloadFiles(urls []string, s *types.ServerConfig, g *types.GetConfig) error {
+func downloadFiles(urls []string, c *types.ClientConfig, g *types.GetConfig) error {
 	err := createDir("app/" + g.Ticker + "/")
 	if err != nil {
 		fmt.Printf("Error: could not create 'app' directory! (%v)\n", err)
@@ -229,10 +228,10 @@ func downloadFiles(urls []string, s *types.ServerConfig, g *types.GetConfig) err
 		// TODO: handle
 	}
 	for i := 0; i < len(urls); i++ {
-		body, err := makeSecRequest(urls[i], s)
+		body, err := makeSecRequest(urls[i], c)
 		if err != nil {
 			fmt.Printf("Error: could not request %s! (%v)\n", urls[i], err)
-			// TODO: Handle
+			return err
 		}
 		err = os.WriteFile("./app/"+g.Ticker+"/"+g.Doc+".html", body, 0666)
 		if err != nil {
@@ -312,7 +311,7 @@ func extractText(n *html.Node) string {
 
 // Downloads company_tickers.json to config/ directory. Returns an error if
 // unsuccessful
-func getCompanyTickers(s *types.ServerConfig) error {
+func getCompanyTickers(c *types.ClientConfig) error {
 	// TODO: replace with makeSecRequest
 	// make url a const
 	// pass it in function call to sec request
@@ -323,7 +322,7 @@ func getCompanyTickers(s *types.ServerConfig) error {
 		return err
 	}
 	req.Header = http.Header{
-		"User-Agent":   {s.Usage + " " + s.Email},
+		"User-Agent":   {c.Usage + " " + c.Email},
 		"Content-Type": {"application/json"},
 	}
 	res, err := client.Do(req)
@@ -344,13 +343,13 @@ func getCompanyTickers(s *types.ServerConfig) error {
 
 // Check for company_tickers.json file. If it exists, returns map of tickers
 // If it does not exist, make a request and download it from SEC
-func checkCompanyTickers(s *types.ServerConfig) map[string]int {
+func checkCompanyTickers(c *types.ClientConfig) map[string]int {
 	data, err := os.ReadFile("config/company_tickers.json")
 	if err != nil {
 		fmt.Printf("Error: could not find company_tickers.json! (%v)\n", err)
 		// TODO: handle
 		fmt.Println("Requesting file...")
-		err = getCompanyTickers(s)
+		err = getCompanyTickers(c)
 		if err != nil {
 			fmt.Printf("Error: could not get company_tickers.json! (%v)\n", err)
 			fmt.Println("Exiting program...")
@@ -360,7 +359,7 @@ func checkCompanyTickers(s *types.ServerConfig) map[string]int {
 			// Recursive call to unmarshal JSON
 			// TODO: Bug here. File downloads then runs into unexpected end of
 			// JSON input. May change to return here and instruct to try again
-			checkCompanyTickers(s)
+			checkCompanyTickers(c)
 		}
 	}
 	// TODO: rethink this section, figure out how we want to save the file

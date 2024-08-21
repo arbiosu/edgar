@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -59,32 +60,51 @@ func setupFlags(c *types.ClientConfig, g *types.GetConfig, p *types.ParseConfig)
 func main() {
 
 	// TODO: check for previous server config and company_tickers.json
+	/*
+		var clientConfig types.ClientConfig
+		var getConfig types.GetConfig
+		var parseConfig types.ParseConfig
+		m := setupFlags(&clientConfig, &getConfig, &parseConfig)
 
-	var clientConfig types.ClientConfig
-	var getConfig types.GetConfig
-	var parseConfig types.ParseConfig
-	m := setupFlags(&clientConfig, &getConfig, &parseConfig)
+		if len(os.Args) < 2 {
+			fmt.Println("Expected 'server' or 'get' subcommands")
+			os.Exit(1)
+		}
 
-	if len(os.Args) < 2 {
-		fmt.Println("expected 'server' or 'get' subcommands")
+		switch os.Args[1] {
+		case "client":
+			m["client"].Parse(os.Args[2:])
+			handleClient(&clientConfig)
+			fmt.Printf("EDGAR Client Configuration: %+v\n", clientConfig)
+		case "get":
+			m["get"].Parse(os.Args[2:])
+			handleGet(&getConfig)
+			fmt.Printf("%+v\n", getConfig)
+		case "parse":
+			m["parse"].Parse(os.Args[2:])
+			fmt.Printf("%+v\n", parseConfig)
+		default:
+			fmt.Println("Expected 'server' or 'get' subcommands")
+			os.Exit(1)
+		}
+	*/
+	clientConfig := &types.ClientConfig{
+		Email: "arberimame@gmail.com",
+		Usage: "PERSONAL USE",
+	}
+	b, err := makeSecRequest("https://data.sec.gov/api/xbrl/companyfacts/CIK0000320193.json", clientConfig)
+	if err != nil {
+		fmt.Printf("err\n")
 		os.Exit(1)
 	}
-
-	switch os.Args[1] {
-	case "server":
-		m["server"].Parse(os.Args[2:])
-		handleClient(&clientConfig)
-		fmt.Printf("EDGAR Client Configuration: %+v\n", clientConfig)
-	case "get":
-		m["get"].Parse(os.Args[2:])
-		handleGet(&getConfig)
-		fmt.Printf("%+v\n", getConfig)
-	case "parse":
-		m["parse"].Parse(os.Args[2:])
-		fmt.Printf("%+v\n", parseConfig)
-	default:
-		fmt.Println("Expected 'server' or 'get' subcommands")
+	var cf types.CompanyFacts
+	err = json.Unmarshal(b, &cf)
+	if err != nil {
+		fmt.Printf("Err (%v)\n", err)
 		os.Exit(1)
+	}
+	for factName, data := range cf.Facts.USGAAP {
+		fmt.Printf("Fact: %s\nData: %v\n", factName, data)
 	}
 }
 
@@ -107,25 +127,24 @@ func handleClient(config *types.ClientConfig) {
 }
 
 func handleGet(getConfig *types.GetConfig) {
-	/*
-		clientConfig := checkConfig()
-		// TODO: handle when CIK is given
-		tickers := checkCompanyTickers(clientConfig)
-		cik, ok := tickers[getConfig.Ticker]
-		if !ok {
-			// TODO: handle err
-			fmt.Printf("Error: Ticker not found! Exiting program.\n")
-			os.Exit(1)
-		}
-		cikStr := strconv.Itoa(cik)
-		url := assembleSubmissionsUrl(cikStr, getConfig)
-		urls := getFileUrls(url, clientConfig, getConfig)
-		err := downloadFiles(urls, clientConfig, getConfig)
-		if err != nil {
-			fmt.Printf("Error: Failed to download files! (%v)\n", err)
-			os.Exit(1)
-		}
-	*/
+	clientConfig := checkConfig()
+	// TODO: handle when CIK is given
+	tickers := checkCompanyTickers(clientConfig)
+	cik, ok := tickers[getConfig.Ticker]
+	if !ok {
+		// TODO: handle err
+		fmt.Printf("Error: Ticker not found! Exiting program.\n")
+		os.Exit(1)
+	}
+	cikStr := strconv.Itoa(cik)
+	url := assembleSubmissionsUrl(cikStr, getConfig)
+	urls := getFileUrls(url, clientConfig, getConfig)
+	err := downloadFiles(urls, clientConfig, getConfig)
+	if err != nil {
+		fmt.Printf("Error: Failed to download files! (%v)\n", err)
+		os.Exit(1)
+	}
+
 	d, err := parseFile(getConfig)
 	if err != nil {
 		os.Exit(1)
@@ -245,6 +264,7 @@ func downloadFiles(urls []string, c *types.ClientConfig, g *types.GetConfig) err
 	return nil
 }
 
+// TODO: FIX
 func parseFile(g *types.GetConfig) ([]types.FinancialData, error) {
 	file, err := os.Open(g.RawFile)
 	if err != nil {
@@ -277,6 +297,7 @@ func parseFile(g *types.GetConfig) ([]types.FinancialData, error) {
 	return financialData, nil
 }
 
+// TODO: FIX
 func extractRowData(n *html.Node) types.FinancialData {
 	var data types.FinancialData
 	var cellIdx int
@@ -300,6 +321,7 @@ func extractRowData(n *html.Node) types.FinancialData {
 	return data
 }
 
+// TODO: FIX
 func extractText(n *html.Node) string {
 	var text string
 	for c := n.FirstChild; c != nil; c = c.NextSibling {

@@ -66,16 +66,8 @@ type UnitData struct {
 
 type UnitEntry struct {
 	PeriodEnd  string      `json:"end"`
-	Value      json.Number `json:"val"`
+	Value      json.Number `json:"val"` // use json.Number because some values are floats
 	FiscalYear int         `json:"fy"`
 	ForPeriod  string      `json:"fp"`
 	Form       string      `json:"form"`
-}
-
-// AI slop
-type FinancialData struct {
-	Category string
-	Year1    string
-	Year2    string
-	Year3    string
 }

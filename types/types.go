@@ -52,8 +52,8 @@ type CompanyFacts struct {
 	Cik        int    `json:"cik"`
 	EntityName string `json:"entityName"`
 	Facts      struct {
-		// TODO: change this to the following format: USGAAP struct {RelevantMetric struct {FactData} json:RelevantMetric} json us-gaap
-		USGAAP map[string]FactData `json:"us-gaap"`
+		// get all fact names as a key with their data as the value
+		Data map[string]FactData `json:"us-gaap"`
 	} `json:"facts"`
 }
 

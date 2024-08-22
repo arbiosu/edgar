@@ -15,6 +15,11 @@ import (
 	"github.com/arbiosu/edgar/types"
 )
 
+const (
+	companyFilings = "https://data.sec.gov/submissions/"
+	companyFacts   = "https://data.sec.gov/api/xbrl/companyfacts/"
+)
+
 func setupFlags(c *types.ClientConfig, g *types.GetConfig, p *types.ParseConfig) map[string]*flag.FlagSet {
 	sh := "(shorthand)"
 	now := time.Now()
@@ -30,13 +35,14 @@ func setupFlags(c *types.ClientConfig, g *types.GetConfig, p *types.ParseConfig)
 	get.StringVar(&g.CIK, "cik", "", "CIK number")
 	get.StringVar(&g.Ticker, "ticker", "", "Stock ticker")
 	get.StringVar(&g.Ticker, "t", "", "Stock ticker"+sh)
-	get.StringVar(&g.Doc, "doc", "10-K", "Desired document (10-k, 10-Q)")
+	get.StringVar(&g.Doc, "doc", "10-K", "Desired document (10-K, 10-Q)")
 	get.StringVar(&g.Doc, "d", "10-K", "Desired document"+sh)
 	get.IntVar(&g.Period, "period", year, "Time period")
 	get.IntVar(&g.Period, "p", year, "Time period"+sh)
-	// TODO: fix or remove?
-	get.StringVar(&g.RawFile, "save", "edgar.html", "Name of the raw file to be parsed")
-	get.StringVar(&g.RawFile, "s", "edgar.html", "Name of the raw file to be parsed"+sh)
+	get.StringVar(&g.RawFile, "save", "edgar.html", "Name of the raw file to be be saved")
+	get.StringVar(&g.RawFile, "s", "edgar.html", "Name of the raw file to be saved"+sh)
+	get.StringVar(&g.Format, "format", "html", "Choose whether to download html files or get a JSON report")
+	get.StringVar(&g.Format, "f", "html", "Choose whether to download html files or get a JSON report")
 
 	// TODO: fix
 	parse := flag.NewFlagSet("parse", flag.ExitOnError)
@@ -55,53 +61,29 @@ func setupFlags(c *types.ClientConfig, g *types.GetConfig, p *types.ParseConfig)
 }
 
 func main() {
+	var clientConfig types.ClientConfig
+	var getConfig types.GetConfig
+	var parseConfig types.ParseConfig
+	m := setupFlags(&clientConfig, &getConfig, &parseConfig)
 
-	// TODO: check for previous server config and company_tickers.json
-	/*
-		var clientConfig types.ClientConfig
-		var getConfig types.GetConfig
-		var parseConfig types.ParseConfig
-		m := setupFlags(&clientConfig, &getConfig, &parseConfig)
-
-		if len(os.Args) < 2 {
-			fmt.Println("Expected 'server' or 'get' subcommands")
-			os.Exit(1)
-		}
-
-		switch os.Args[1] {
-		case "client":
-			m["client"].Parse(os.Args[2:])
-			handleClient(&clientConfig)
-			fmt.Printf("EDGAR Client Configuration: %+v\n", clientConfig)
-		case "get":
-			m["get"].Parse(os.Args[2:])
-			handleGet(&getConfig)
-			fmt.Printf("%+v\n", getConfig)
-		case "parse":
-			m["parse"].Parse(os.Args[2:])
-			fmt.Printf("%+v\n", parseConfig)
-		default:
-			fmt.Println("Expected 'server' or 'get' subcommands")
-			os.Exit(1)
-		}
-	*/
-	clientConfig := &types.ClientConfig{
-		Email: "arberimame@gmail.com",
-		Usage: "PERSONAL USE",
-	}
-	b, err := makeSecRequest("https://data.sec.gov/api/xbrl/companyfacts/CIK0000320193.json", clientConfig)
-	if err != nil {
-		fmt.Printf("err\n")
+	if len(os.Args) < 2 {
+		fmt.Println("Expected 'client' or 'get' subcommands")
 		os.Exit(1)
 	}
-	var cf types.CompanyFacts
-	err = json.Unmarshal(b, &cf)
-	if err != nil {
-		fmt.Printf("Err (%v)\n", err)
+
+	switch os.Args[1] {
+	case "client":
+		m["client"].Parse(os.Args[2:])
+		handleClient(&clientConfig)
+		fmt.Printf("EDGAR Client Configuration: %+v\n", clientConfig)
+	case "get":
+		m["get"].Parse(os.Args[2:])
+		handleGet(&getConfig)
+	case "parse":
+		m["parse"].Parse(os.Args[2:])
+	default:
+		fmt.Println("Expected 'client' or 'get' subcommands")
 		os.Exit(1)
-	}
-	for factName, data := range cf.Facts.USGAAP {
-		fmt.Printf("Fact: %s\nData: %v\n", factName, data)
 	}
 }
 
@@ -123,25 +105,36 @@ func handleClient(config *types.ClientConfig) {
 	}
 }
 
-func handleGet(getConfig *types.GetConfig) {
+func handleGet(g *types.GetConfig) {
 	clientConfig := checkConfig()
-	// TODO: handle when CIK is given
-	tickers := checkCompanyTickers(clientConfig)
-	cik, ok := tickers[getConfig.Ticker]
-	if !ok {
-		// TODO: handle err
-		fmt.Printf("Error: Ticker not found! Exiting program.\n")
-		os.Exit(1)
+	if g.CIK == "" {
+		tickers := checkCompanyTickers(clientConfig)
+		cik, ok := tickers[g.Ticker]
+		if !ok {
+			// TODO: handle err
+			fmt.Printf("Error: Ticker not found! Exiting program.\n")
+			os.Exit(1)
+		}
+		cikStr := strconv.Itoa(cik)
+		padded := zeroPad(cikStr)
+		g.CIK = padded
 	}
-	cikStr := strconv.Itoa(cik)
-	url := assembleSubmissionsUrl(cikStr, getConfig)
-	urls := getFileUrls(url, clientConfig, getConfig)
-	err := downloadFiles(urls, clientConfig, getConfig)
-	if err != nil {
-		fmt.Printf("Error: Failed to download files! (%v)\n", err)
-		os.Exit(1)
+	var url string
+	switch g.Format {
+	case "json":
+		url = assembleUrl(g.CIK, companyFacts)
+		// TODO: handle
+	case "html":
+		url = assembleUrl(g.CIK, companyFilings)
+		urls := getFileUrls(url, clientConfig, g)
+		err := downloadFiles(urls, clientConfig, g)
+		if err != nil {
+			fmt.Printf("Error: Failed to download files! (%v)\n", err)
+			os.Exit(1)
+		}
 	}
-	//TODO :
+	fmt.Printf("Ticker: %s\nFormat: %s\nFiling(s): %s\nPeriod: %d\n", g.Ticker, g.Format, g.Doc, g.Period)
+	fmt.Println("Your desired report(s) are located in the app/ directory. Thanks for using edgar!")
 }
 
 // Creates a directory
@@ -225,7 +218,6 @@ func getFileUrls(url string, c *types.ClientConfig, g *types.GetConfig) []string
 			re := regexp.MustCompile(`-`)
 			cleaned := re.ReplaceAllString(cf.Filings.Recent.AccessionNumber[i], "")
 			urls = append(urls, newUrl+cf.Cik+"/"+cleaned+"/"+cf.Filings.Recent.PrimaryDocument[i])
-
 		}
 	}
 	return urls
@@ -339,7 +331,39 @@ func editCompanyTickers(tickers map[int]types.Ticker) map[string]int {
 }
 */
 
-// Adds leading zeroes to a CIK string to make it 10 characters long.
+// Gets the XBRL tags associated with income statements, balance sheets and cash flow statements
+func getXBRLTags() types.XBRLTags {
+	b, err := os.ReadFile("xbrl_to_fin-statement_mapping.json")
+	if err != nil {
+		fmt.Printf("Error: could not read xbrl mapping file! (%v)", err)
+		os.Exit(1)
+	}
+	var xbrl types.XBRLTags
+	err = json.Unmarshal(b, &xbrl)
+	if err != nil {
+		fmt.Printf("Error: could not unmarshal xbrl mapping file! (%v)", err)
+		os.Exit(1)
+	}
+	return xbrl
+}
+
+func getCompanyFacts(url string, c *types.ClientConfig) *types.CompanyFacts {
+	body, err := makeSecRequest(url, c)
+	if err != nil {
+		fmt.Printf("Error: could not make SEC Request! (%v)\n", err)
+		// TODO: handle
+	}
+	var cf types.CompanyFacts
+	err = json.Unmarshal(body, &cf)
+	if err != nil {
+		fmt.Printf("Error: could not unmarshal JSON! (%V)\n", err)
+		os.Exit(1)
+	}
+	return &cf
+}
+
+// Adds leading zeroes to a CIK string to make it 10 characters long and compatible
+// with SEC API.
 func zeroPad(cik string) string {
 	for len(cik) < 10 {
 		cik = "0" + cik
@@ -348,9 +372,7 @@ func zeroPad(cik string) string {
 	return cik
 }
 
-// Assemble the submissions url to get company info. Update the GetConfig struct.
-func assembleSubmissionsUrl(cik string, g *types.GetConfig) string {
-	cik = zeroPad(cik)
-	g.CIK = cik
-	return "https://data.sec.gov/submissions/" + cik + ".json"
+// Assemble the url to get company info.
+func assembleUrl(cik string, url string) string {
+	return url + cik + ".json"
 }

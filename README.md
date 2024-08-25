@@ -4,5 +4,5 @@
 
 ##### TODO:
 1. Parse html files
-2. Figure out the relevant JSON for financial data from the company facts SEC EDGAR endpoint
+2. Validate time period and desired filings for JSON data
 3. Fix cmd flags

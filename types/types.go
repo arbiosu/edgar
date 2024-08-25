@@ -126,49 +126,52 @@ type XBRLTags struct {
 }
 
 // The Report struct is used to assemble a financial report for a user
-type Report struct {
-	FinancialStatement struct {
-		BalanceSheetItems struct {
-			Assets struct {
-				CurrentAssets    []UnitEntry
-				NonCurrentAssets []UnitEntry
-				TotalAssets      []UnitEntry
-			}
-			Liabilities struct {
-				CurrentLiabilities    []UnitEntry
-				NonCurrentLiabilities []UnitEntry
-				TotalLiabilities      []UnitEntry
-			}
-			Equity                    []UnitEntry
-			TotalLiabilitiesAndEquity []UnitEntry
+type FinancialStatement struct {
+	BalanceSheet struct {
+		Assets struct {
+			CurrentAssets    []LineItem
+			NonCurrentAssets []LineItem
+			TotalAssets      []LineItem
 		}
-		IncomeStatementItems struct {
-			Revenue             []UnitEntry
-			CostOfRevenue       []UnitEntry
-			GrossProfit         []UnitEntry
-			OperatingExpenses   []UnitEntry
-			OperatingIncomeLoss []UnitEntry
-			OtherIncomeExpense  []UnitEntry
-			IncomeBeforeTax     []UnitEntry
-			IncomeTax           []UnitEntry
-			NetIncomeLoss       []UnitEntry
+		Liabilities struct {
+			CurrentLiabilities    []LineItem
+			NonCurrentLiabilities []LineItem
+			TotalLiabilities      []LineItem
 		}
-		CashFlowStatementItems struct {
-			OperatingActivities    []UnitEntry
-			InvestingActivities    []UnitEntry
-			FinancingActivities    []UnitEntry
-			CashAndCashEquivalents []UnitEntry
-		}
-		OtherComprehensiveIncomeItems []UnitEntry
-		FinancialMetricsAndRatios     []UnitEntry
-		ShareBasedCompensation        []UnitEntry
-		Taxes                         []UnitEntry
-		Leases                        []UnitEntry
-		DebtAndBorrowings             []UnitEntry
-		IntangibleAssetsAndGoodwill   []UnitEntry
-		CommitmentsAndContingencies   []UnitEntry
-		DerivativesAndHedging         []UnitEntry
-		StockAndEquityRelatedItems    []UnitEntry
-		OtherFinancialItems           []UnitEntry
+		Equity                    []LineItem
+		TotalLiabilitiesAndEquity []LineItem
 	}
+	IncomeStatement struct {
+		Revenue             []LineItem
+		CostOfRevenue       []LineItem
+		GrossProfit         []LineItem
+		OperatingExpenses   []LineItem
+		OperatingIncomeLoss []LineItem
+		OtherIncomeExpense  []LineItem
+		IncomeBeforeTax     []LineItem
+		IncomeTax           []LineItem
+		NetIncomeLoss       []LineItem
+	}
+	CashFlowStatement struct {
+		OperatingActivities    []LineItem
+		InvestingActivities    []LineItem
+		FinancingActivities    []LineItem
+		CashAndCashEquivalents []LineItem
+	}
+	OtherComprehensiveIncome    []LineItem
+	FinancialMetricsAndRatios   []LineItem
+	ShareBasedCompensation      []LineItem
+	Taxes                       []LineItem
+	Leases                      []LineItem
+	DebtAndBorrowings           []LineItem
+	IntangibleAssetsAndGoodwill []LineItem
+	CommitmentsAndContingencies []LineItem
+	DerivativesAndHedging       []LineItem
+	StockAndEquityRelatedItems  []LineItem
+	OtherFinancialItems         []LineItem
+}
+
+type LineItem struct {
+	Tag  string
+	Data []UnitEntry
 }

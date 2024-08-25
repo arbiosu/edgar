@@ -18,6 +18,7 @@ import (
 const (
 	companyFilings = "https://data.sec.gov/submissions/"
 	companyFacts   = "https://data.sec.gov/api/xbrl/companyfacts/"
+	companyTickers = "https://www.sec.gov/files/company_tickers.json"
 )
 
 func setupFlags(c *types.ClientConfig, g *types.GetConfig, p *types.ParseConfig) map[string]*flag.FlagSet {
@@ -67,7 +68,7 @@ func main() {
 	m := setupFlags(&clientConfig, &getConfig, &parseConfig)
 
 	if len(os.Args) < 2 {
-		fmt.Println("Expected 'client' or 'get' subcommands")
+		fmt.Println("Error: expected 'client' or 'get' subcommands. Exiting...")
 		os.Exit(1)
 	}
 
@@ -111,8 +112,7 @@ func handleGet(g *types.GetConfig) {
 		tickers := checkCompanyTickers(clientConfig)
 		cik, ok := tickers[g.Ticker]
 		if !ok {
-			// TODO: handle err
-			fmt.Printf("Error: Ticker not found! Exiting program.\n")
+			fmt.Printf("Error: ticker not found! Exiting program.\n")
 			os.Exit(1)
 		}
 		cikStr := strconv.Itoa(cik)
@@ -127,12 +127,12 @@ func handleGet(g *types.GetConfig) {
 		xbrl := getXBRLTags()
 		r, err := assembleReport(facts, xbrl)
 		if err != nil {
-			fmt.Printf("Error: could not assemble company report! (%v)", err)
+			fmt.Printf("Error: could not assemble company report! (%v)\n", err)
 			os.Exit(1)
 		}
 		err = downloadJSON(g, r)
 		if err != nil {
-			fmt.Printf("Error: could not download company report! (%v)", err)
+			fmt.Printf("Error: could not download company report! (%v)\n", err)
 		}
 	case "html":
 		url = assembleUrl(g.CIK, companyFilings)
@@ -151,6 +151,7 @@ func handleGet(g *types.GetConfig) {
 // Creates a directory
 func createDir(name string) error {
 	var err error
+	// if the given directory name contains subdirectories, use MkdirAll
 	if filepath.Dir(name) != "." {
 		err = os.MkdirAll(name, os.ModePerm)
 	} else {
@@ -162,11 +163,13 @@ func createDir(name string) error {
 	return nil
 }
 
+// Check for a previous client configuration. If the config.json file does not
+// exist. TODO: create one
 func checkConfig() *types.ClientConfig {
-	fmt.Println("Checking for previous server configuration...")
+	fmt.Println("Checking for previous client configuration...")
 	c, err := os.ReadFile("./config/config.json")
 	if err != nil {
-		fmt.Printf("Error reading config file: %v\n", err)
+		fmt.Printf("Error: could not read config file: (%v)\n", err)
 		os.Exit(1)
 	}
 	var clientConfig types.ClientConfig
@@ -234,6 +237,7 @@ func getFileUrls(url string, c *types.ClientConfig, g *types.GetConfig) []string
 	return urls
 }
 
+// TODO: rethink downloadFiles and downloadJSON
 func downloadFiles(urls []string, c *types.ClientConfig, g *types.GetConfig) error {
 	err := createDir("app/" + g.Ticker + "/")
 	if err != nil {
@@ -262,16 +266,15 @@ func downloadJSON(g *types.GetConfig, r *types.FinancialStatement) error {
 	if err != nil {
 		fmt.Printf("Error: could not create 'app' directory! (%v)\n", err)
 		return err
-		// TODO: handle
 	}
-	b, err := json.Marshal(r)
+	b, err := json.MarshalIndent(r, "", "	")
 	if err != nil {
-		fmt.Printf("Error: could not marshal financial statement! (%v)\n")
+		fmt.Printf("Error: could not marshal financial statement! (%v)\n", err)
 		return err
 	}
 	err = os.WriteFile("./app/"+g.Ticker+"/"+g.Doc+".json", b, 0770)
 	if err != nil {
-		fmt.Printf("Error: could not write file to app dir! (%v)\n")
+		fmt.Printf("Error: could not write file to app dir! (%v)\n", err)
 		return err
 	}
 	return nil
@@ -280,29 +283,11 @@ func downloadJSON(g *types.GetConfig, r *types.FinancialStatement) error {
 // Downloads company_tickers.json to config/ directory. Returns an error if
 // unsuccessful
 func getCompanyTickers(c *types.ClientConfig) error {
-	// TODO: replace with makeSecRequest
-	// make url a const
-	// pass it in function call to sec request
-	// write to config/company_tickers.json
-	client := http.Client{}
-	req, err := http.NewRequest("GET", "https://www.sec.gov/files/company_tickers.json", nil)
+	b, err := makeSecRequest(companyTickers, c)
 	if err != nil {
 		return err
 	}
-	req.Header = http.Header{
-		"User-Agent":   {c.Usage + " " + c.Email},
-		"Content-Type": {"application/json"},
-	}
-	res, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer res.Body.Close()
-	body, err := io.ReadAll(res.Body)
-	if err != nil {
-		return err
-	}
-	err = os.WriteFile("config/company_tickers.json", body, 0666)
+	err = os.WriteFile("config/company_tickers.json", b, 0666)
 	if err != nil {
 		return err
 	}
@@ -383,7 +368,6 @@ func getCompanyFacts(url string, c *types.ClientConfig) *types.CompanyFacts {
 	body, err := makeSecRequest(url, c)
 	if err != nil {
 		fmt.Printf("Error: could not make SEC Request! (%v)\n", err)
-		// TODO: handle
 		os.Exit(1)
 	}
 	var cf types.CompanyFacts

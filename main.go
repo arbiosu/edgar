@@ -40,8 +40,8 @@ func setupFlags(c *types.ClientConfig, g *types.GetConfig, p *types.ParseConfig)
 	get.StringVar(&g.Doc, "d", "10-K", "Desired document"+sh)
 	get.IntVar(&g.Period, "period", year, "Time period")
 	get.IntVar(&g.Period, "p", year, "Time period"+sh)
-	get.StringVar(&g.RawFile, "save", "edgar.html", "Name of the raw file to be be saved")
-	get.StringVar(&g.RawFile, "s", "edgar.html", "Name of the raw file to be saved"+sh)
+	get.StringVar(&g.RawFile, "save", "", "Name of the raw file to be be saved")
+	get.StringVar(&g.RawFile, "s", "", "Name of the raw file to be saved"+sh)
 	get.StringVar(&g.Format, "format", "html", "Choose whether to download html files or get a JSON report")
 	get.StringVar(&g.Format, "f", "html", "Choose whether to download html files or get a JSON report")
 
@@ -125,10 +125,13 @@ func handleGet(g *types.GetConfig) {
 		url = assembleUrl(g.CIK, companyFacts)
 		facts := getCompanyFacts(url, clientConfig)
 		xbrl := getXBRLTags()
-		r, err := assembleReport(facts, xbrl)
+		r, err := assembleReport(facts, xbrl, g)
 		if err != nil {
 			fmt.Printf("Error: could not assemble company report! (%v)\n", err)
 			os.Exit(1)
+		}
+		if g.RawFile == "" {
+			g.RawFile = g.Ticker + "_company_facts"
 		}
 		err = downloadJSON(g, r)
 		if err != nil {
@@ -143,7 +146,7 @@ func handleGet(g *types.GetConfig) {
 			os.Exit(1)
 		}
 	}
-	fmt.Printf("Ticker: %s\nFormat: %s\nFiling(s): %s\nPeriod: %d\n", g.Ticker, g.Format, g.Doc, g.Period)
+	fmt.Printf("URL: %s\nCIK: %s\nTicker: %s\nFormat: %s\nFiling(s): %s\nPeriod: %d\n", url, g.CIK, g.Ticker, g.Format, g.Doc, g.Period)
 	fmt.Println("Your desired report(s) are located in the app/ directory. Thanks for using edgar!")
 	os.Exit(0)
 }
@@ -272,7 +275,7 @@ func downloadJSON(g *types.GetConfig, r *types.FinancialStatement) error {
 		fmt.Printf("Error: could not marshal financial statement! (%v)\n", err)
 		return err
 	}
-	err = os.WriteFile("./app/"+g.Ticker+"/"+g.Doc+".json", b, 0770)
+	err = os.WriteFile("./app/"+g.Ticker+"/"+g.RawFile+".json", b, 0770)
 	if err != nil {
 		fmt.Printf("Error: could not write file to app dir! (%v)\n", err)
 		return err
@@ -381,40 +384,40 @@ func getCompanyFacts(url string, c *types.ClientConfig) *types.CompanyFacts {
 
 // Assemble the financial statement report
 // TODO: FIX!!
-func assembleReport(f *types.CompanyFacts, xbrl *types.XBRLTags) (*types.FinancialStatement, error) {
+func assembleReport(f *types.CompanyFacts, xbrl *types.XBRLTags, g *types.GetConfig) (*types.FinancialStatement, error) {
 	report := &types.FinancialStatement{}
-	assembleBalanceSheet(f, xbrl, report)
-	assembleIncomeStatement(f, xbrl, report)
-	assembleCashFlowStatement(f, xbrl, report)
+	assembleBalanceSheet(f, xbrl, report, g)
+	assembleIncomeStatement(f, xbrl, report, g)
+	assembleCashFlowStatement(f, xbrl, report, g)
 	return report, nil
 }
 
 // Assembles the balance sheet
 // TODO: better way to do this?
-func assembleBalanceSheet(f *types.CompanyFacts, xbrl *types.XBRLTags, r *types.FinancialStatement) {
+func assembleBalanceSheet(f *types.CompanyFacts, xbrl *types.XBRLTags, r *types.FinancialStatement, g *types.GetConfig) {
 	data := f.Facts.Data
 	// Assemble Assets
 	currentAssets := xbrl.Tags.BalanceSheetItems.Assets.CurrentAssets
 	nonCurrentAssets := xbrl.Tags.BalanceSheetItems.Assets.NonCurrentAssets
 	totalAssets := xbrl.Tags.BalanceSheetItems.Assets.TotalAssets
-	iterateTags(data, currentAssets, &r.BalanceSheet.Assets.CurrentAssets)
-	iterateTags(data, nonCurrentAssets, &r.BalanceSheet.Assets.NonCurrentAssets)
-	iterateTags(data, totalAssets, &r.BalanceSheet.Assets.TotalAssets)
+	iterateTags(data, currentAssets, &r.BalanceSheet.Assets.CurrentAssets, g)
+	iterateTags(data, nonCurrentAssets, &r.BalanceSheet.Assets.NonCurrentAssets, g)
+	iterateTags(data, totalAssets, &r.BalanceSheet.Assets.TotalAssets, g)
 	// Assemble liabilities
 	currLiabilities := xbrl.Tags.BalanceSheetItems.Liabilities.CurrentLiabilities
 	nonCurrLiabilities := xbrl.Tags.BalanceSheetItems.Liabilities.NonCurrentLiabilities
 	totalLiabilities := xbrl.Tags.BalanceSheetItems.Liabilities.TotalLiabilities
-	iterateTags(data, currLiabilities, &r.BalanceSheet.Liabilities.CurrentLiabilities)
-	iterateTags(data, nonCurrLiabilities, &r.BalanceSheet.Liabilities.NonCurrentLiabilities)
-	iterateTags(data, totalLiabilities, &r.BalanceSheet.Liabilities.TotalLiabilities)
+	iterateTags(data, currLiabilities, &r.BalanceSheet.Liabilities.CurrentLiabilities, g)
+	iterateTags(data, nonCurrLiabilities, &r.BalanceSheet.Liabilities.NonCurrentLiabilities, g)
+	iterateTags(data, totalLiabilities, &r.BalanceSheet.Liabilities.TotalLiabilities, g)
 	// Assemble equity
 	equity := xbrl.Tags.BalanceSheetItems.Equity
 	totalLiabilitiesEquity := xbrl.Tags.BalanceSheetItems.TotalLiabilitiesAndEquity
-	iterateTags(data, equity, &r.BalanceSheet.Equity)
-	iterateTags(data, totalLiabilitiesEquity, &r.BalanceSheet.TotalLiabilitiesAndEquity)
+	iterateTags(data, equity, &r.BalanceSheet.Equity, g)
+	iterateTags(data, totalLiabilitiesEquity, &r.BalanceSheet.TotalLiabilitiesAndEquity, g)
 }
 
-func assembleIncomeStatement(f *types.CompanyFacts, xbrl *types.XBRLTags, r *types.FinancialStatement) {
+func assembleIncomeStatement(f *types.CompanyFacts, xbrl *types.XBRLTags, r *types.FinancialStatement, g *types.GetConfig) {
 	data := f.Facts.Data
 	revenue := xbrl.Tags.IncomeStatementItems.Revenue
 	cogs := xbrl.Tags.IncomeStatementItems.CostOfRevenue
@@ -425,42 +428,53 @@ func assembleIncomeStatement(f *types.CompanyFacts, xbrl *types.XBRLTags, r *typ
 	incomeBeforeTax := xbrl.Tags.IncomeStatementItems.IncomeBeforeTax
 	tax := xbrl.Tags.IncomeStatementItems.IncomeTax
 	ni := xbrl.Tags.IncomeStatementItems.NetIncomeLoss
-	iterateTags(data, revenue, &r.IncomeStatement.Revenue)
-	iterateTags(data, cogs, &r.IncomeStatement.CostOfRevenue)
-	iterateTags(data, gp, &r.IncomeStatement.GrossProfit)
-	iterateTags(data, opex, &r.IncomeStatement.OperatingExpenses)
-	iterateTags(data, opIncomeLos, &r.IncomeStatement.OperatingIncomeLoss)
-	iterateTags(data, other, &r.IncomeStatement.OtherIncomeExpense)
-	iterateTags(data, incomeBeforeTax, &r.IncomeStatement.IncomeBeforeTax)
-	iterateTags(data, tax, &r.IncomeStatement.IncomeBeforeTax)
-	iterateTags(data, ni, &r.IncomeStatement.NetIncomeLoss)
+	iterateTags(data, revenue, &r.IncomeStatement.Revenue, g)
+	iterateTags(data, cogs, &r.IncomeStatement.CostOfRevenue, g)
+	iterateTags(data, gp, &r.IncomeStatement.GrossProfit, g)
+	iterateTags(data, opex, &r.IncomeStatement.OperatingExpenses, g)
+	iterateTags(data, opIncomeLos, &r.IncomeStatement.OperatingIncomeLoss, g)
+	iterateTags(data, other, &r.IncomeStatement.OtherIncomeExpense, g)
+	iterateTags(data, incomeBeforeTax, &r.IncomeStatement.IncomeBeforeTax, g)
+	iterateTags(data, tax, &r.IncomeStatement.IncomeBeforeTax, g)
+	iterateTags(data, ni, &r.IncomeStatement.NetIncomeLoss, g)
 }
 
-func assembleCashFlowStatement(f *types.CompanyFacts, xbrl *types.XBRLTags, r *types.FinancialStatement) {
+func assembleCashFlowStatement(f *types.CompanyFacts, xbrl *types.XBRLTags, r *types.FinancialStatement, g *types.GetConfig) {
 	data := f.Facts.Data
 	opActivities := xbrl.Tags.CashFlowStatementItems.OperatingActivities
 	investingActivities := xbrl.Tags.CashFlowStatementItems.InvestingActivities
 	financingActivities := xbrl.Tags.CashFlowStatementItems.FinancingActivities
 	// TODO: ?
 	cash := xbrl.Tags.CashFlowStatementItems.CashAndCashEquivalents
-	iterateTags(data, opActivities, &r.CashFlowStatement.OperatingActivities)
-	iterateTags(data, investingActivities, &r.CashFlowStatement.InvestingActivities)
-	iterateTags(data, financingActivities, &r.CashFlowStatement.FinancingActivities)
-	iterateTags(data, cash, &r.CashFlowStatement.CashAndCashEquivalents)
+	iterateTags(data, opActivities, &r.CashFlowStatement.OperatingActivities, g)
+	iterateTags(data, investingActivities, &r.CashFlowStatement.InvestingActivities, g)
+	iterateTags(data, financingActivities, &r.CashFlowStatement.FinancingActivities, g)
+	iterateTags(data, cash, &r.CashFlowStatement.CashAndCashEquivalents, g)
 }
 
-func iterateTags(d map[string]types.FactData, item []string, l *[]types.LineItem) {
+func iterateTags(d map[string]types.FactData, item []string, l *[]types.LineItem, g *types.GetConfig) {
 	for i := 0; i < len(item); i++ {
 		factData, ok := d[item[i]]
 		if ok {
-			newLi := &types.LineItem{Tag: factData.Label, Data: factData.Units.USD}
+			relevant := findRelevantUnitEntries(&factData.Units.USD, g)
+			newLi := &types.LineItem{Tag: factData.Label, Data: *relevant}
 			*l = append(*l, *newLi)
 		}
 	}
 }
 
-// Adds leading zeroes to a CIK string to make it 10 characters long and compatible
-// with SEC API.
+func findRelevantUnitEntries(entries *[]types.UnitEntry, g *types.GetConfig) *[]types.UnitEntry {
+	var relevantEntries []types.UnitEntry
+	for _, v := range *entries {
+		if v.Form == g.Doc && v.FiscalYear == g.Period {
+			relevantEntries = append(relevantEntries, v)
+		}
+	}
+	return &relevantEntries
+}
+
+// Adds leading zeroes to a CIK string to make it 10 characters long and
+// compatible with the SEC API.
 func zeroPad(cik string) string {
 	for len(cik) < 10 {
 		cik = "0" + cik

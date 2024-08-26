@@ -127,6 +127,17 @@ type XBRLTags struct {
 
 // The Report struct is used to assemble a financial report for a user
 type FinancialStatement struct {
+	IncomeStatement struct {
+		Revenue             []LineItem
+		CostOfRevenue       []LineItem
+		GrossProfit         []LineItem
+		OperatingExpenses   []LineItem
+		OperatingIncomeLoss []LineItem
+		OtherIncomeExpense  []LineItem
+		IncomeBeforeTax     []LineItem
+		IncomeTax           []LineItem
+		NetIncomeLoss       []LineItem
+	}
 	BalanceSheet struct {
 		Assets struct {
 			CurrentAssets    []LineItem
@@ -140,17 +151,6 @@ type FinancialStatement struct {
 		}
 		Equity                    []LineItem
 		TotalLiabilitiesAndEquity []LineItem
-	}
-	IncomeStatement struct {
-		Revenue             []LineItem
-		CostOfRevenue       []LineItem
-		GrossProfit         []LineItem
-		OperatingExpenses   []LineItem
-		OperatingIncomeLoss []LineItem
-		OtherIncomeExpense  []LineItem
-		IncomeBeforeTax     []LineItem
-		IncomeTax           []LineItem
-		NetIncomeLoss       []LineItem
 	}
 	CashFlowStatement struct {
 		OperatingActivities    []LineItem

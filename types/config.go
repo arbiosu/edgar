@@ -24,7 +24,7 @@ type ClientConfig struct {
 	Usage string
 }
 
-func (c *ClientConfig) handleClient() {
+func (c *ClientConfig) HandleClient() {
 	err := createDir("config")
 	if err != nil {
 		fmt.Printf("Error: could not create 'config' directory! (%v)\n", err)
@@ -166,7 +166,7 @@ type GetConfig struct {
 	Format  string // JSON or HTML
 }
 
-func handleGet(g *GetConfig) {
+func (g *GetConfig) HandleGet() {
 	c := checkConfig()
 	if g.CIK == "" {
 		tickers := c.checkCompanyTickers()

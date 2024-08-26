@@ -4,5 +4,5 @@
 
 ##### TODO:
 1. Parse html files
-2. Validate time period and desired filings for JSON data
-3. Fix cmd flags
+2. Fix cmd flags
+3. some tickers return all null data, figure out why

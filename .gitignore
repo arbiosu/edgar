@@ -1,2 +1,3 @@
 config/
 app/
+xbrl_to_fin-statement_mapping.json
